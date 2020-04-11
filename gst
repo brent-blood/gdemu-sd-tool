@@ -9,7 +9,8 @@ import os
 import os.path
 import json
 import shutil
-import zipfile
+
+import romsupport
 
 def print_err(message):
     """write a message to stderr"""
@@ -24,7 +25,10 @@ class Gst:
         self.manifest = manifest
         self.verbose = verbose
         self.max_slot = 1
-        self.data = {}
+
+        # place GDmenu in the first slot
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        self.slots = [romsupport.Rom(f'{script_dir}/gdmenu', 'GDmenu')]
 
     def debug(self, message):
         """write a message when verbose output requested"""
@@ -32,71 +36,59 @@ class Gst:
             print(message)
 
     def parse_manifest(self):
-        """Convert JSON to python datastructure"""
+        """validate manifest and build image list"""
         with open(self.manifest) as json_file:
-            self.data = json.load(json_file)
+            manifest = json.load(json_file)
 
         self.debug("Checking format of manifest")
-        if 'slots' not in self.data:
+        if 'slots' not in manifest:
             print_err(f"'slots' must be defined")
             sys.exit(1)
 
-        slot_num = 1
-        for game in self.data['slots']:
-            self.debug(f"testing slot {slot_num} for required keys")
+        for game in manifest['slots']:
+            self.debug(f"testing slot for required keys")
             if 'src' not in game:
-                print_err(f"'src' not defined for slot {slot_num}")
+                print_err(f"'src' not defined for slot")
                 sys.exit(1)
             if 'name' not in game:
-                print_err(f"'name' not defined for slot {slot_num}")
-                sys.exit(1)
-            self.debug(f"testing if file for slot {slot_num} exists")
-            if not os.path.isfile(game['src']):
-                print_err(f"file does not exist: {game['src']}")
+                print_err(f"'name' not defined for slot")
                 sys.exit(1)
 
-            slot_num = slot_num + 1
-        # the last increment in the loop moves it one greater than the number
-        # of games in the file, but slot 01 is always GDmenu so it's actually
-        # correct so no need to adjust.
-        self.max_slot = slot_num
-        self.debug(f"Last slot will be {self.max_slot}")
+            src = game['src']
+            name = game['name']
+
+            self.debug(f"testing if file exists: {src}")
+            if not os.path.isfile(src):
+                print_err(f"file does not exist: {src}")
+                sys.exit(1)
+
+            self.slots.append(romsupport.Rom(src, name))
 
     def create_directories(self):
         """Create directories for all slots"""
-        for slot in range(1, self.max_slot + 1):
+        for slot in range(1, len(self.slots) + 1):
             # The GDemu docs say that slots 0-9 should be zero filled and
             # anything larger just uses its natural length. This fits that.
             slot_dir = f"{slot:02}"
             self.debug(f"Creating dir: {self.mnt}/{slot_dir}")
             os.mkdir(f"{self.mnt}/{slot_dir}")
 
-    def install_gdmenu(self):
-        """Install GDmenu onto mount point"""
-        self.debug("Copying GDmenu files")
-        shutil.copy('./gdmenu/GDEMU.ini', f"{self.mnt}/")
-        # GDmenu is just another slot to GDemu - so it follows the same
-        # naming rules.
-        shutil.copyfile('./gdmenu/GDmenu_v0.6.cdi', f"{self.mnt}/01/disc.cdi")
-
     def copy_files(self):
-        """dump out internal datastructure"""
-        for slot in range(2, self.max_slot + 1):
-            # see comment above for why this format is used.
-            slot_dir = f"{slot:02}"
-            # the datastructure is 0-indexed _and_ doesn't account for GDmenu
-            # being in slot 01 so it's necessary to adjust backwards by 2
-            game = self.data['slots'][slot - 2]
-            self.debug(f"Copying {game['name']} to {self.mnt}/{slot_dir}")
+        """Copy GDEMU ini and invoke appropriate copy routine from each slot"""
 
-            with zipfile.ZipFile(game['src']) as archive:
-                for file in archive.namelist():
-                    archive.extract(file, f"{self.mnt}/{slot_dir}")
-                    if file.endswith(".gdi"):
-                        shutil.move(f"{self.mnt}/{slot_dir}/{file}",
-                                    f"{self.mnt}/{slot_dir}/disc.gdi")
-            with open(f"{self.mnt}/{slot_dir}/name.txt", "w+") as name_file:
-                name_file.write(f"{game['name']}\n")
+        # Copy ini file for GDEMU to the root of the target directory.
+        # This file is included with the script in the dcmenu subdirectory
+        # so act relative to the script's location.
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        shutil.copy(f'{script_dir}/gdmenu/GDEMU.ini', f"{self.mnt}/")
+
+        # Each ROM container class has its own routine for copying files
+        for index, slot in enumerate(self.slots):
+            slot.translate_rom(f"{self.mnt}/{index+1:02}")
+
+    def copy_manifest(self):
+        """Place a copy of the manifest file onto the SD card"""
+        shutil.copyfile(self.manifest, f"{self.mnt}/manifest.json")
 
 def main():
     """entrypoint for the program"""
@@ -114,8 +106,8 @@ def main():
 
     gst = Gst(mnt=args.target, manifest=args.manifest, verbose=args.verbose)
     gst.parse_manifest()
+    gst.copy_manifest()
     gst.create_directories()
-    gst.install_gdmenu()
     gst.copy_files()
 
 if __name__ == "__main__":
