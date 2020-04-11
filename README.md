@@ -31,7 +31,7 @@ I haven't added any logic to make the tool smart enough to recognize when a fold
 
 The manifest isn't complicated. It should look like:
 
-```
+```json
 {
     "slots": [
         {
@@ -68,4 +68,4 @@ I may never do any of this because what I have now is working for me, but maybe 
 
 GDEMU - There wouldn't be any point in creating this app without GDEMU existing in the first place. I encourage anyone with a Dreamcast to perform this hardware modification. It's not difficult and will really breath life back into your old hardware.
 
-I didn't write GDmenu, but I consider it essential for effectively using GDEMU. See the readme.txt in the gdmenu directory for attribution. I can't determine if this has a proper site to reliably pull it from, but it doesnt have any license terms attached so I decided to just include a static copy with the tool.
+Gdmenu - I didn't write GDmenu, but I consider it essential for effectively using GDEMU. See the readme.txt in the gdmenu directory for attribution. I can't determine if this has a proper site to reliably pull it from, but it doesnt have any license terms attached so I decided to just include a static copy with the tool.
