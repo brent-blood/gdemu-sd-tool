@@ -1,6 +1,7 @@
 """Dreamcast ROM Class"""
 
 import os.path
+from os import mkdir
 import shutil
 
 import romsupport
@@ -26,6 +27,12 @@ class Rom:
 
     def translate_rom(self, dst_dir):
         """Initiate copying and transforming ROM contents to destination."""
+        if hasattr(self, 'skip') and self.skip is True:
+            print(f"skipping rom {self.name}")
+            return
+        elif hasattr(self, 'skip') and self.skip is False:
+            shutil.rmtree(dst_dir)
+            mkdir(dst_dir)
         print(f"translating rom {self.name}")
         # get a list of all the files to copy and loop over them
         for filename in self.handler.get_filenames():
